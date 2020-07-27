@@ -73,7 +73,7 @@ heroku:
 
 ## ecs_run.rb
 
-Run a script on an ECS service
+Run shell script or Ruby code on an ECS service
 
 ```sh
 Usage: ecs_run.rb [options] [command or STDIN]
@@ -82,6 +82,8 @@ Usage: ecs_run.rb [options] [command or STDIN]
     -w, --watch                      Watch output
     -r, --ruby                       Run input as Ruby code with Rails runner (instead of shell command)
 ```
+
+Note that the command is non-interactive - you provide the code and you watch it execute.
 
 ### Specify target
 
@@ -129,3 +131,21 @@ ecs_run.rb -c app -s app --ruby 'p User.first'
 ```
 
 This way you get Rails log output, but note that, unlike a Rails console, you don't see command evaluation results by default - you need to print it explicitly.
+
+### Example
+
+```sh
+$ ruby ecs_run.rb --cluster myapp --service myapp --watch --ruby
+Type your command then press Ctrl+D
+Note - Ruby evaluation result is NOT automatically printed, use `p`
+User.where("email LIKE '%@myapp.com'").update_all(role: 'admin')
+^D
+Task started. See it online at https://us-east-1.console.aws.amazon.com/ecs/home?region=us-east-1#/clusters/mailtrap/tasks/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/details
+Watching task output. Note - Ctrl+C will stop watching, but will NOT stop the task!
+[2020-07-25 08:42:01 +0300] Task status changed to PROVISIONING
+[2020-07-25 08:42:23 +0300] Task status changed to PENDING
+[2020-07-25 08:43:18 +0300] Task status changed to RUNNING
+[2020-07-25 08:43:42 +0300] I, [2020-07-25T05:43:37.853603 #7]  INFO -- : Raven 3.0.0 ready to catch errors
+[2020-07-25 08:44:01 +0300] Task status changed to DEPROVISIONING
+[2020-07-25 08:44:14 +0300] Task status changed to STOPPED
+```
