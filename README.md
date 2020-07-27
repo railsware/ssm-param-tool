@@ -1,4 +1,8 @@
-# ssm-param-tool
+# aws-ecs-tools
+
+A collection of Ruby scripts that make it easier to work with ECS from the command line.
+
+## param_tool.rb
 
 A tool to sync up AWS Systems Manager Parameter Store with a local YAML file.
 
@@ -11,9 +15,9 @@ Usage: param_tool.rb [options] (down|up)
     -d, --dry-run                    Do not apply changes
 ```
 
-## Download params
+### Download params
 
-```
+```sh
 param_tool.rb --prefix /staging/myapp down >params.yml
 ```
 
@@ -21,9 +25,9 @@ param_tool.rb --prefix /staging/myapp down >params.yml
 - secure param keys are suffixed with '!'
 - param tree is unwrapped into a hash
 
-## Upload params
+### Upload params
 
-```
+```sh
 param_tool.rb --prefix /staging/myapp up <params.yml
 
 # specify a key to do the encryption:
@@ -40,7 +44,7 @@ param_tool.rb --dry-run --prefix /staging/myapp up <params.yml
 - to make a param secure, add a `!` suffix to the key name - note that the '!' character itself will be stripped from the key name in Parameter Store
 - params with a value of `DELETE` are deleted from parameter store
 
-## Workflow concept
+### Workflow concept
 
 - create a YAML file with the params you need; you can reuse the same file for a file-based Global backend.
 - upload it to staging
@@ -48,7 +52,7 @@ param_tool.rb --dry-run --prefix /staging/myapp up <params.yml
 - download params from staging, update, and send to prod
 - commit param set as reference (make sure that sensitive params are secured, and thus not committed)
 
-## Sample params.yml
+### Sample params.yml
 
 ```yaml
 ---
@@ -66,3 +70,62 @@ heroku:
      "useful": "for SSH keys"
     }
 ```
+
+## ecs_run.rb
+
+Run a script on an ECS service
+
+```sh
+Usage: ecs_run.rb [options] [command or STDIN]
+    -c, --cluster=CLUSTER            Cluster name
+    -s, --service=SERVICE            Service name
+    -w, --watch                      Watch output
+    -r, --ruby                       Run input as Ruby code with Rails runner (instead of shell command)
+```
+
+### Specify target
+
+Cluster and service are required params. Besides them, you'll need to set the region through environment variables.
+
+### Providing input
+
+There are three ways to provide input:
+
+- as a final argument to the command - make sure to quote it properly
+
+  ```sh
+  ecs_run.rb -c app -s app 'rake -T'
+  ```
+
+- from a file
+
+  ```sh
+  ecs_run.rb -c app -s app <script.sh
+  ```
+
+- type it in
+
+  ```sh
+  ecs_run.rb -c app -s app
+  Type your command then press Ctrl+D
+  rake -T
+  [Ctrl+D]
+  ```
+
+Note that in all cases you're providing literal code to be evaluated on the ECS service; you can't send files; the rest of the environment is defined by the service.
+
+### Watching output
+
+Normally after you start the task you get an AWS Console link to monitor the task online, and that's it.
+
+But if you specify the `--watch` option, you will see the task status changes and the output logged to the terminal. You will also know when the task has finished.
+
+### Running Ruby code
+
+Besides running shell code, you can also run Ruby code with the Rails runner (only available if `bundle` and a Rails app are present in your service's docker image.)
+
+```sh
+ecs_run.rb -c app -s app --ruby 'p User.first'
+```
+
+This way you get Rails log output, but note that, unlike a Rails console, you don't see command evaluation results by default - you need to print it explicitly.

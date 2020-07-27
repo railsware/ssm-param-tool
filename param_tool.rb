@@ -1,3 +1,5 @@
+#!/bin/env ruby
+
 require 'yaml'
 require 'aws-sdk-ssm'
 require 'optparse'
