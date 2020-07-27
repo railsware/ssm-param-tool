@@ -89,6 +89,8 @@ Note that the command is non-interactive - you provide the code and you watch it
 
 Cluster and service are required params. Besides them, you'll need to set the region through environment variables.
 
+The command retrieves the task definition, subnet, and security group from the service automatically.
+
 ### Providing input
 
 There are three ways to provide input:
