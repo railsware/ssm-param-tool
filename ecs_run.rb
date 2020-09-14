@@ -25,8 +25,8 @@ OptionParser.new do |opts|
     config[:ruby] = true
   end
 
-  opts.on('-R', '--region', 'Aws region') do |r|
-    config[:region] = true
+  opts.on('-R', '--region=REGION', 'Aws region') do |r|
+    config[:region] = r
   end
 end.parse!
 raise OptionParser::MissingArgument, 'cluster' if config[:cluster].nil?
