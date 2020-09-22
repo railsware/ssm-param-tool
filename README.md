@@ -81,6 +81,7 @@ Usage: ecs_run.rb [options] [command or STDIN]
     -s, --service=SERVICE            Service name
     -w, --watch                      Watch output
     -r, --ruby                       Run input as Ruby code with Rails runner (instead of shell command)
+    -R, --region                     AWS region to use
 ```
 
 Note that the command is non-interactive - you provide the code and you watch it execute.

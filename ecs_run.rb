@@ -24,6 +24,10 @@ OptionParser.new do |opts|
   opts.on('-r', '--ruby', 'Run input as Ruby code with Rails runner (instead of shell command)') do |r|
     config[:ruby] = true
   end
+
+  opts.on('-R', '--region=REGION', 'Aws region') do |r|
+    config[:region] = r
+  end
 end.parse!
 raise OptionParser::MissingArgument, 'cluster' if config[:cluster].nil?
 raise OptionParser::MissingArgument, 'service' if config[:service].nil?
@@ -38,7 +42,12 @@ unless command
 end
 command = "bundle exec rails runner #{command.shellescape}" if config[:ruby]
 
-client = Aws::ECS::Client.new
+client_opts = {}
+client_opts[:region] = config[:region] if config[:region]
+client = Aws::ECS::Client.new(client_opts)
+unless client_opts[:region]
+  puts "No region is specified. Using #{client.config.region}"
+end
 
 resp = client.describe_services(
   cluster: config[:cluster],
