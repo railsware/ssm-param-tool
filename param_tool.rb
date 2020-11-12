@@ -103,11 +103,11 @@ end
 def read_param_tree(client, config)
   param_tree = {}
   get_all_params(client, config[:prefix]).each do |param|
-    name_parts = param.name[config[:prefix].length..-1].split('/').map(&:to_sym)
+    name_parts = param.name[config[:prefix].length..-1].split('/')
     key_name = name_parts.pop
     value = param.value
     if param.type == 'SecureString'
-      key_name = (key_name.to_s + '!').to_sym
+      key_name += '!'
       value = SECURE_MARKER
     end
     key_container = name_parts.reduce(param_tree) { |h, k| h[k] ||= {}; h[k] }
@@ -122,7 +122,7 @@ if ARGV[0] == 'down'
   puts YAML.dump(param_tree)
 elsif ARGV[0] == 'up'
   new_param_tree = begin
-    YAML.load(STDIN.read, symbolize_names: true)
+    YAML.load(STDIN.read)
   rescue StandardError => e
     raise "Failed to read params YAML from standard input: #{e}"
   end
