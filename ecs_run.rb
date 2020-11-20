@@ -85,7 +85,8 @@ task_response = client.run_task(
   network_configuration: {
     awsvpc_configuration: {
       subnets: [subnet],
-      security_groups: [security_group]
+      security_groups: [security_group],
+      assign_public_ip: 'ENABLED'
     }
   }
 )
