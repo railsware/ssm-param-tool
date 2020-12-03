@@ -85,7 +85,8 @@ task_response = client.run_task(
   network_configuration: {
     awsvpc_configuration: {
       subnets: [subnet],
-      security_groups: [security_group]
+      security_groups: [security_group],
+      assign_public_ip: 'ENABLED'
     }
   }
 )
@@ -123,16 +124,20 @@ loop do
   end
 
   if log_client && %w[RUNNING DEPROVISIONING].include?(task_status)
-    events_resp = log_client.get_log_events(
-      log_group_name: log_configuration.options['awslogs-group'],
-      log_stream_name: log_stream_name,
-      start_from_head: true,
-      next_token: log_token
-    )
-    events_resp.events.each do |event|
-      puts "[#{Time.at(event.timestamp / 1000)}] #{event.message}"
+    begin
+      events_resp = log_client.get_log_events(
+        log_group_name: log_configuration.options['awslogs-group'],
+        log_stream_name: log_stream_name,
+        start_from_head: true,
+        next_token: log_token
+      )
+      events_resp.events.each do |event|
+        puts "[#{Time.at(event.timestamp / 1000)}] #{event.message}"
+      end
+      log_token = events_resp.next_forward_token
+    rescue Aws::CloudWatchLogs::Errors::ResourceNotFoundException
+      # task did not output anything to the logs yet
     end
-    log_token = events_resp.next_forward_token
   end
   sleep 1
 end
