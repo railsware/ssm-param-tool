@@ -8,11 +8,16 @@ SECURE_MARKER = 'SECURE'
 DELETE_MARKER = 'DELETE'
 
 config = {
-  dryrun: false,
-  decrypt: false
+  yes: false,
+  decrypt: false,
+  file: nil
 }
 OptionParser.new do |opts|
   opts.banner = "Usage: param_tool.rb [options] (down|up)"
+
+  opts.on("-f", "--file=FILE", "File with params") do |f|
+    config[:file] = f
+  end
 
   opts.on("-p", "--prefix=PREFIX", "Param prefix") do |p|
     config[:prefix] = p
@@ -22,12 +27,12 @@ OptionParser.new do |opts|
     config[:key] = k
   end
 
-  opts.on("-D", "--decrypt", "Output decrypted params") do
+  opts.on("-d", "--decrypt", "Output decrypted params") do
     config[:decrypt] = true
   end
 
-  opts.on("-d", "--dry-run", "Do not apply changes") do
-    config[:dryrun] = true
+  opts.on("-y", "--yes", "Apply changes without asking for confirmation (DANGER)") do
+    config[:yes] = true
   end
 end.parse!
 raise OptionParser::MissingArgument, 'prefix' if config[:prefix].nil?
@@ -52,14 +57,14 @@ def get_all_params(client, prefix, with_decryption, next_token = nil)
   end
 end
 
-def write_param_tree(client, config, old_param_tree, keypath, value)
+def build_write_params_plan(client, config, old_param_tree, keypath, value)
   if value.is_a?(Hash)
-    value.each do |key, child|
-      write_param_tree(client, config, old_param_tree, keypath + [key], child)
+    value.flat_map do |key, child|
+      build_write_params_plan(client, config, old_param_tree, keypath + [key], child)
     end
   elsif value.is_a?(Array)
-    value.each.with_index do |child, index|
-      write_param_tree(client, config, old_param_tree, keypath + [index], child)
+    value.each.with_index.flat_map do |child, index|
+      build_write_params_plan(client, config, old_param_tree, keypath + [index], child)
     end
   else
     key_name = config[:prefix] + keypath.join('/')
@@ -70,26 +75,15 @@ def write_param_tree(client, config, old_param_tree, keypath, value)
       secure = true
       if value == SECURE_MARKER
         # skip secure parameter that is not being written
-        return
+        return []
       end
     end
 
     if value == DELETE_MARKER
       old_value = old_param_tree.dig(*keypath)
-      return if old_value.nil?
+      return [] if old_value.nil?
 
-      # delete parameter
-      puts "Deleting param #{key_name}"
-
-      unless config[:dryrun]
-        begin
-          client.delete_parameter(name: key_name)
-        rescue Aws::SSM::Errors::ParameterNotFound
-          # cool cool, parameter is already missing
-        end
-      end
-
-      return
+      return [{ name: key_name, operation: :delete }]
     end
 
     string_value = value.to_s
@@ -97,19 +91,61 @@ def write_param_tree(client, config, old_param_tree, keypath, value)
     old_value = old_param_tree.dig(*keypath)
     if old_value == string_value
       # skip params with no change
-      return
+      return []
     end
 
-    puts "Writing new value for #{secure ? 'secure ' : ''}param #{key_name}"
+    [{
+      name: key_name,
+      operation: old_value ? :update : :create,
+      value: string_value,
+      secure: secure
+    }]
+  end
+end
 
-    unless config[:dryrun]
-      client.put_parameter(
-        name: key_name,
-        value: string_value,
-        type: secure ? 'SecureString' : 'String',
-        key_id: secure ? config[:key] : nil,
-        overwrite: true
-      )
+def print_write_plan(plan)
+  plan.each do |item|
+    print "#{item[:operation]} #{item[:name]}"
+    if item[:value]
+      print ' = '
+      if item[:secure]
+        print '<sensitive value redacted>'
+      else
+        print item[:value].inspect
+      end
+    end
+
+    puts
+  end
+end
+
+def apply_write_plan(config, client, plan)
+  plan.each do |item|
+    begin
+      if item[:operation] == :delete
+        print "deleting parameter #{item[:name]}..."
+        begin
+          client.delete_parameter(name: key_name)
+          puts 'done'
+        rescue Aws::SSM::Errors::ParameterNotFound
+          puts 'already missing'
+        end
+      elsif %i[create update].include? item[:operation]
+        print "writing parameter #{item[:name]}..."
+        client.put_parameter(
+          name: item[:name],
+          value: item[:value],
+          type: item[:secure] ? 'SecureString' : 'String',
+          key_id: item[:secure] ? config[:key] : nil,
+          overwrite: item[:operation] == :update
+        )
+        puts 'done'
+      end
+    rescue Aws::SSM::Errors::ThrottlingException
+      puts
+      puts 'AWS SSM request limit exceeded - waiting for 1 second before retrying'
+      sleep 1
+      retry
     end
   end
 end
@@ -131,19 +167,54 @@ def read_param_tree(client, config)
 end
 
 if ARGV[0] == 'down'
-  puts YAML.dump(read_param_tree(client, config))
+  yaml_config = YAML.dump(read_param_tree(client, config))
+  if config[:file]
+    File.open(config[:file], 'w') { |f| f.puts yaml_config }
+  else
+    $stdout.puts yaml_config
+  end
 elsif ARGV[0] == 'up'
   config[:decrypt] = true # so we can compare old values to new
   old_param_tree = read_param_tree(client, config)
-  new_param_tree = begin
-    YAML.load(STDIN.read)
-  rescue StandardError => e
-    raise "Failed to read params YAML from standard input: #{e}"
+  new_param_tree =
+    begin
+      if config[:file]
+        File.open(config[:file]) { |f| YAML.safe_load(f.read) }
+      else
+        YAML.safe_load(STDIN.read)
+      end
+    rescue StandardError => e
+      raise "Failed to read params YAML: #{e}"
+    end
+
+  plan = build_write_params_plan(client, config, old_param_tree, [], new_param_tree)
+
+  if plan.empty?
+    puts 'All parameters are up to date. Nothing to do.'
+    exit(0)
   end
 
-  puts "DRY RUN (no changes applied)" if config[:dryrun]
+  puts 'Planned changes:'
 
-  write_param_tree(client, config, old_param_tree, [], new_param_tree)
+  print_write_plan(plan)
+
+  if !config[:file] && !config[:yes]
+    puts 'To automatically apply params from STDIN, run with --yes flag'
+    puts 'Operation aborted. No changes were made.'
+    exit(1)
+  end
+
+  print 'Apply? (anything but "yes" will abort): '
+  answer = $stdin.gets.chomp
+
+  if answer != 'yes'
+    puts 'Operation aborted. No changes were made.'
+    exit(1)
+  end
+
+  apply_write_plan(config, client, plan)
+
+  puts 'All done!'
 else
   puts "USAGE param_tool.rb (up|down)"
 end
