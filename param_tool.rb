@@ -67,17 +67,19 @@ def build_write_params_plan(client, config, old_param_tree, keypath, value)
       build_write_params_plan(client, config, old_param_tree, keypath + [index], child)
     end
   else
-    key_name = config[:prefix] + keypath.join('/')
     secure = false
 
-    if key_name[-1] == '!'
-      key_name = key_name[0..-2]
-      secure = true
+    if keypath[-1][-1] == '!'
       if value == SECURE_MARKER
         # skip secure parameter that is not being written
         return []
       end
+
+      keypath = keypath.clone.tap { |kp| kp[-1] = kp[-1][0..-2] }
+      secure = true
     end
+
+    key_name = config[:prefix] + keypath.join('/')
 
     if value == DELETE_MARKER
       old_value = old_param_tree.dig(*keypath)
@@ -150,14 +152,14 @@ def apply_write_plan(config, client, plan)
   end
 end
 
-def read_param_tree(client, config)
+def read_param_tree(client, config, add_secure_suffix = true)
   param_tree = {}
   get_all_params(client, config[:prefix], config[:decrypt]).each do |param|
     name_parts = param.name[config[:prefix].length..-1].split('/')
     key_name = name_parts.pop
     value = param.value
     if param.type == 'SecureString'
-      key_name += '!'
+      key_name += '!' if add_secure_suffix
       value = SECURE_MARKER unless config[:decrypt]
     end
     key_container = name_parts.reduce(param_tree) { |h, k| h[k] ||= {}; h[k] }
@@ -175,7 +177,7 @@ if ARGV[0] == 'down'
   end
 elsif ARGV[0] == 'up'
   config[:decrypt] = true # so we can compare old values to new
-  old_param_tree = read_param_tree(client, config)
+  old_param_tree = read_param_tree(client, config, false)
   new_param_tree =
     begin
       if config[:file]
