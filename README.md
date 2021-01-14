@@ -10,9 +10,11 @@ WIP; TODO a prettier name.
 
 ```
 Usage: param_tool.rb [options] (down|up)
+    -f, --file=FILE                  File with params
     -p, --prefix=PREFIX              Param prefix
-    -k, --key=KEY                    Encryption key for writing secure params
-    -d, --dry-run                    Do not apply changes
+    -k, --key=KEY                    Encryption key for writing secure params (no effect on reading)
+    -d, --decrypt                    Output decrypted params
+    -y, --yes                        Apply changes without asking for confirmation (DANGER)
 ```
 
 ### Download params
@@ -21,21 +23,32 @@ Usage: param_tool.rb [options] (down|up)
 param_tool.rb --prefix /staging/myapp down >params.yml
 ```
 
-- secure (encrypted) param values are replaced with `SECURE` - NOT decrypted.
-- secure param keys are suffixed with '!'
-- param tree is unwrapped into a hash
+- Secure (encrypted) param values are replaced with `SECURE` - NOT decrypted.
+- To decrypt, use `-d` key.
+- Secure param keys are suffixed with '!'
+- Params are converted into a tree, using slashes as nesting separators.
 
 ### Upload params
 
 ```sh
-param_tool.rb --prefix /staging/myapp up <params.yml
+# see planned changes, confirm, apply:
+param_tool.rb --prefix /staging/myapp --file params.yml up
+
+Planned changes:
+create /staging/myapp/host = "app.com"
+delete /staging/myapp/deprecated
+update /staging/myapp/port = "80"
+Apply? (anything but "yes" will abort): yes
+writing parameter /staging/myapp/host...done
+deleting parameter /staging/myapp/deprecated...done
+writing parameter /staging/myapp/port...done
+All done!
+
+# non-interactive mode (and you can pass params to standard input)
+my_param_generating_script.sh | param_tool.rb --prefix /staging/myapp --yes up
 
 # specify a key to do the encryption:
-param_tool.rb --key alias/mailtrap-parameter-store --prefix /staging/myapp up <params.yml
-
-# do a dry run:
-param_tool.rb --dry-run --prefix /staging/myapp up <params.yml
-
+param_tool.rb --key alias/mailtrap-parameter-store --prefix /staging/myapp --file params.yml up
 ```
 
 - params that are not changed will not be updated
