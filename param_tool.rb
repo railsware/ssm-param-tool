@@ -127,7 +127,7 @@ def apply_write_plan(config, client, plan)
       if item[:operation] == :delete
         print "deleting parameter #{item[:name]}..."
         begin
-          client.delete_parameter(name: key_name)
+          client.delete_parameter(name: item[:name])
           puts 'done'
         rescue Aws::SSM::Errors::ParameterNotFound
           puts 'already missing'
