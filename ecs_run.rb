@@ -17,6 +17,10 @@ OptionParser.new do |opts|
     config[:service] = s
   end
 
+  opts.on('-C', '--container=CONTAINER', 'Container name') do |s|
+    config[:container] = s
+  end
+
   opts.on('-w', '--watch', 'Watch output') do |s|
     config[:watch] = true
   end
@@ -59,11 +63,16 @@ service = resp.services[0]
 
 task_definition = client.describe_task_definition(task_definition: service.task_definition).task_definition
 
-if task_definition.container_definitions.length > 1
-  raise 'Running in tasks with more than one container is not yet supported'
-end
+container_name = config[:container]
 
-container_name = task_definition.container_definitions.first.name
+unless container_name
+  if task_definition.container_definitions.length > 1
+    container_names = task_definition.container_definitions.map(&:name)
+    raise "Multiple containers exist: #{container_names.join(', ')}. Running in tasks with more than one container is not yet supported"
+  end
+
+  container_name = task_definition.container_definitions.first.name
+end
 
 vpc_config = service.deployments[0].network_configuration.awsvpc_configuration
 
