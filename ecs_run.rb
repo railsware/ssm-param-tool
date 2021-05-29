@@ -28,6 +28,10 @@ OptionParser.new do |opts|
   opts.on('-R', '--region=REGION', 'Aws region') do |r|
     config[:region] = r
   end
+
+  opts.on('-C', '--container=CONTAINER', 'Container name') do |c|
+    config[:container] = c
+  end
 end.parse!
 raise OptionParser::MissingArgument, 'cluster' if config[:cluster].nil?
 raise OptionParser::MissingArgument, 'service' if config[:service].nil?
@@ -59,11 +63,18 @@ service = resp.services[0]
 
 task_definition = client.describe_task_definition(task_definition: service.task_definition).task_definition
 
-if task_definition.container_definitions.length > 1
-  raise 'Running in tasks with more than one container is not yet supported'
+container_name = if config[:container]
+  task_definition.container_definitions.detect { |cd| cd.name == config[:container] }&.name
+else
+  first_container_name = task_definition.container_definitions.first.name
+  if task_definition.container_definitions.length > 1
+    puts "Container not set in options. Taking first: #{first_container_name} " \
+      "out of #{task_definition.container_definitions.map(&:name).join(', ')}."
+  end
+  first_container_name
 end
 
-container_name = task_definition.container_definitions.first.name
+raise 'No container found.' unless container_name
 
 vpc_config = service.deployments[0].network_configuration.awsvpc_configuration
 
