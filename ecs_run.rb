@@ -17,6 +17,10 @@ OptionParser.new do |opts|
     config[:service] = s
   end
 
+  opts.on('-C', '--container=CONTAINER', 'Container name') do |s|
+    config[:container] = s
+  end
+
   opts.on('-w', '--watch', 'Watch output') do |s|
     config[:watch] = true
   end
