@@ -63,16 +63,18 @@ service = resp.services[0]
 
 task_definition = client.describe_task_definition(task_definition: service.task_definition).task_definition
 
-container_name = config[:container]
-
-unless container_name
+container_name = if config[:container]
+  task_definition.container_definitions.detect { |cd| cd.name == config[:container] }&.name
+else
+  first_container_name = task_definition.container_definitions.first.name
   if task_definition.container_definitions.length > 1
-    container_names = task_definition.container_definitions.map(&:name)
-    raise "Multiple containers exist: #{container_names.join(', ')}. Running in tasks with more than one container is not yet supported"
+    puts "Container not set in options. Taking first: #{first_container_name} " \
+      "out of #{task_definition.container_definitions.map(&:name).join(', ')}."
   end
-
-  container_name = task_definition.container_definitions.first.name
+  first_container_name
 end
+
+raise 'No container found.' unless container_name
 
 vpc_config = service.deployments[0].network_configuration.awsvpc_configuration
 
