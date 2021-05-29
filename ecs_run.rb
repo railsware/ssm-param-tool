@@ -32,10 +32,6 @@ OptionParser.new do |opts|
   opts.on('-R', '--region=REGION', 'Aws region') do |r|
     config[:region] = r
   end
-
-  opts.on('-C', '--container=CONTAINER', 'Container name') do |c|
-    config[:container] = c
-  end
 end.parse!
 raise OptionParser::MissingArgument, 'cluster' if config[:cluster].nil?
 raise OptionParser::MissingArgument, 'service' if config[:service].nil?
